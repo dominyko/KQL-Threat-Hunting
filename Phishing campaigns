@@ -1,0 +1,21 @@
+//Created by Dominyko
+//This threat hunt helps to catch current phishing campaigns. It looks for emails with the exact same subject line that got sent to inbox and quarantine. That means, that some emails evaded protect, while other didn't. 
+//Depending on your anti-phishing filters, false positives are possible.
+//Use it in 365 Defender or adapt it to Sentinel if you have the logs. (change Timestamp to Timegenerated)
+EmailEvents
+| where Timestamp > ago(14d) //Set the time
+| where DeliveryAction == "Delivered"
+| where DeliveryLocation == "Inbox/folder"
+//| where Subject contains "passwords" //Target specific keyword
+| summarize count_ = count(), NetworkMessageIds = make_list(NetworkMessageId) by Subject, DeliveryLocation
+| join kind=inner (
+    EmailEvents
+    | where DeliveryAction == "Blocked"
+    | where DeliveryLocation == "Quarantine"
+    | where ThreatTypes contains "Phish" or ThreatTypes contains "Malware"
+    | summarize count_4 = count(), NetworkMessageIds_4 = make_list(NetworkMessageId) by Subject, DeliveryLocation, ThreatTypes
+) on Subject
+| extend NetworkMessageIdsList = strcat_array(array_slice(NetworkMessageIds, 0, array_length(NetworkMessageIds)), ", ")
+| extend NetworkMessageIdsList_2 = strcat_array(array_slice(NetworkMessageIds_4, 0, array_length(NetworkMessageIds_4)), ", ")
+| project Subject_1 = Subject, DeliveryLocation_1 = DeliveryLocation, count_1 = count_, NetworkMessageIdsList_1 = NetworkMessageIdsList, Subject_2 = Subject1, DeliveryLocation_2 = DeliveryLocation1, ThreatTypes, count_2 = count_4, NetworkMessageIdsList_2 = NetworkMessageIdsList_2
+| where DeliveryLocation_1 != DeliveryLocation_2
