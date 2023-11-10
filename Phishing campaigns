@@ -1,4 +1,4 @@
-//Created by Dominyko
+//Created by Dominyko 
 //This threat hunt helps to catch current phishing campaigns. It looks for emails with the exact same subject line that got sent to inbox and quarantine. That means, that some emails evaded protect, while other didn't. 
 //Depending on your anti-phishing filters, false positives are possible.
 //Use it in 365 Defender or adapt it to Sentinel if you have the logs. (change Timestamp to Timegenerated)
