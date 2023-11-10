@@ -1,0 +1,12 @@
+//Created by Dominyko
+//This mainly works on Chrome & Edge browsers.
+//Use it in 365 Defender or adapt it to Sentinel if you have the logs. (change Timestamp to Timegenerated)
+
+DeviceProcessEvents
+| where Timestamp > ago (14d) //Set the time
+| where InitiatingProcessCommandLine contains "--notification-launch"
+| extend url = extract("https://[^|]+", 0, InitiatingProcessCommandLine)
+| where isnotempty(url)
+//| where InitiatingProcessAccountName contains "ash"
+| where url !contains "facebook.com" and url !contains "netflix.com" and url !contains "youtube.com" and url !contains "google.com" and url !contains "office.com" and url !contains "microsoft.com" //Whitelist domains
+| summarize count () by Timestamp, url, DeviceName,InitiatingProcessAccountName, InitiatingProcessFileName
