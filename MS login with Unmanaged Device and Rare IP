@@ -1,0 +1,44 @@
+//This query looks for any Devices that communicated with login.live.com and within 5min a new sign-in was made from a rare IP (that is not Joint/Registered).
+//Change "Duration" how long back you want to search. Change "InitialAccessMinutes" to decide give time for initial access after visiting specific URL.
+//Created by Dominykas Vaitkus
+let Duration = ago(30d); //Change for sign-in Durations.
+let InitialAccessMinutes = (5); //Change for Initial Access minutes
+let visitedWebsites = DeviceNetworkEvents
+    | where Timestamp > ago (1h) //Change for how long back to look for login.live.com. Currently alert is running every hour.
+    | extend RemoteUrl = tolower(RemoteUrl)
+    | where RemoteUrl == "https://login.live.com" // Add more sites if you neccessary.
+    | where InitiatingProcessAccountUpn != ""
+    | summarize count() by bin(Timestamp, 1m), AccountUpn = tolower(InitiatingProcessAccountUpn), ReportId
+    | summarize arg_max(Timestamp, *) by AccountUpn;
+let IPsWithErrorCodeZero = AADSignInEventsBeta
+    | where Timestamp > Duration
+    | where ErrorCode == "0"
+    | summarize by IPAddress;
+let RareSignIns = AADSignInEventsBeta
+    | where Timestamp > Duration
+    | where IPAddress !contains ":"
+    | where IPAddress != ""
+    | where ErrorCode == "0"
+    | extend AccountUpnLower = tolower(AccountUpn)
+    | summarize IPCount = count(), LatestTimestamp = max(Timestamp) by AccountUpnLower, IPAddress
+    | where IPCount < 5
+    | project AccountUpn = AccountUpnLower, IPAddress, Timestamp = LatestTimestamp;
+let NonCompliantIPs = AADSignInEventsBeta
+    | where Timestamp > Duration
+    | where IPAddress !contains ":"
+    | where IPAddress != ""
+    | where DeviceTrustType != ""
+    | where ErrorCode == "0"
+    | summarize IPCount = count() by bin(Timestamp, 1m), AccountUpn = tolower(AccountUpn), IPAddress
+    | where IPCount < 5
+    | summarize arg_max(Timestamp, *) by AccountUpn, IPAddress;
+let CleanedNonCompliantIPs = RareSignIns
+    | join kind=anti (NonCompliantIPs) on IPAddress
+    | join kind=inner IPsWithErrorCodeZero on IPAddress
+    | project-away IPAddress1
+    | summarize arg_max(Timestamp, *) by AccountUpn, IPAddress;
+visitedWebsites
+    | join kind=inner CleanedNonCompliantIPs on AccountUpn
+    | extend timeDifference = abs(datetime_diff('minute', Timestamp, Timestamp1))
+    | where timeDifference <= InitialAccessMinutes
+    | project AccountUpn, IPAddress, Timestamp, Timestamp1, timeDifference, ReportId
